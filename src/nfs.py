@@ -33,7 +33,7 @@ class NFS():
             # split dataset equally based on current feature
             splits = {}
             for n in range(0, 5):
-                splits[(min + n*(max - min)/5, min + (n + 1)*(max - min)/5)] = {}
+                splits[(min + n*(max - min)/10, min + (n + 2)*(max - min)/10)] = {}
 
             # for each slice, count the number of observations of each class inbetween splits
             for observation in range(0, np.shape(data)[0]):
