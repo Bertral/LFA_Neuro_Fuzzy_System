@@ -33,19 +33,19 @@ class NFS():
             # split dataset equally based on current feature
             splits = {}
             for n in range(0, 5):
-                splits[(min + n*(max - min)/10, min + (n + 2)*(max - min)/10)] = {}
+                splits[(min + n*(max - min)/10, min + (n + 1)*(max - min)/10 , min + (n + 2)*(max - min)/10)] = {}
 
             # for each slice, count the number of observations of each class inbetween splits
             for observation in range(0, np.shape(data)[0]):
-                for (k_low, k_high) in splits.keys():
+                for (k_low, k_mid, k_high) in splits.keys():
                     if k_low <= data[observation, feat_index] <= k_high:
 
                         # if class dict not initialized, create it
-                        if target[observation] not in splits[(k_low, k_high)]:
-                            splits[(k_low, k_high)][target[observation]] = 0
+                        if target[observation] not in splits[(k_low, k_mid, k_high)]:
+                            splits[(k_low, k_mid, k_high)][target[observation]] = 0
 
                         # increment the count for this class, slice and feature
-                        splits[(k_low, k_high)][target[observation]] += 1
+                        splits[(k_low, k_mid, k_high)][target[observation]] += 1
                         break
             membership_functions[feat_index] = splits
 
@@ -53,6 +53,15 @@ class NFS():
 
         # TODO find the slice intersections that contain more than min_observations_per_rule of a single class
         # then start learning
+        '''
+        élimiter les COMBINAISONS de fuzzy sets ayant moins de min_observations_per_rule observations
+        
+        pour chaque observation, trouver la règles la plus active, trouver la distance au centre de cette règle sur
+        chaque axe, déplacer le centre vers l'observation, idem pour l'extrêmité (un peu plus), ou l'inverse si la classe
+        n'est pas bonne par rapport à la règle.
+        
+        puis élaguer
+        '''
 
         print(membership_functions)
 
