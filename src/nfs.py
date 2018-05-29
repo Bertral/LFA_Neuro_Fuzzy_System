@@ -1,4 +1,5 @@
 import numpy as np
+import itertools
 from src.fuzzy_systems.core.rules.fuzzy_rule import FuzzyRule
 from sklearn import datasets
 
@@ -12,49 +13,11 @@ class NFS():
     def train(self, data: np.ndarray, target: np.ndarray, nb_iter: int, learning_rate : float):
         """
         Train the NFS for nb_iter complete passes on data
-        Data must be a 2-dimentionnal numpy array of this format :
-        
-        value_A_of_1    value_B_of_1    ...     value_X_of_1
-        value_A_of_2    value_B_of_2    ...     value_X_of_2
-        ...             ...             ...     ...
-        value_A_of_n    value_B_of_n    ...     value_X_of_n
+        Data must be a 2-dimentionnal numpy matrix (each row is an observation, each col a feature)
         
         """
-        self._rules = []
+        self._rules = []  # list of dictionnaries (key = list of fuzzy sets, value = dominant class)
 
-        membership_functions = {}
-
-        # for each feature, initialize memberships functions
-        for feat_index in range(0, np.shape(data)[1]):
-            min_obs = np.min(data[:, feat_index])
-            max_obs = np.max(data[:, feat_index])
-            membership_functions[feat_index] = {}
-
-            # split dataset equally based on current feature (make triangles)
-            splits = {}
-            for n in range(0, 5):
-                splits[(min_obs + n*(max_obs - min_obs)/10,
-                        min_obs + (n + 1)*(max_obs - min_obs)/10,
-                        min_obs + (n + 2)*(max_obs - min_obs)/10)] = {}
-
-            # for each slice, count the number of observations of each class inbetween splits
-            for observation in range(0, np.shape(data)[0]):
-                for (k_low, k_mid, k_high) in splits.keys():
-                    if k_low <= data[observation, feat_index] <= k_high:
-
-                        # if class dict not initialized, create it
-                        if target[observation] not in splits[(k_low, k_mid, k_high)]:
-                            splits[(k_low, k_mid, k_high)][target[observation]] = 0
-
-                        # increment the count for this class, slice and feature
-                        splits[(k_low, k_mid, k_high)][target[observation]] += 1
-                        break
-            membership_functions[feat_index] = splits
-
-        # membership functions now is membership_functions[feature_number][(p0, p1, p2)][class] = observ. count
-
-        # TODO find the slice intersections that contain more than _min_observations_per_rule of a single class
-        # then start learning
         '''
         élimiter les COMBINAISONS de fuzzy sets ayant moins de _min_observations_per_rule observations
         
@@ -64,23 +27,10 @@ class NFS():
         
         puis élaguer
         '''
-        temp = {}
-        # supprime les classes minoritaires du décompte de chaque ensemble
-        for feat_key, feat in membership_functions.items():
-            temp[feat_key] = {}
-            for slice_key, slice in feat.items():
-                for key, count in slice.items():
-                    if count == max(slice.values()):
-                        temp[feat_key][slice_key] = (key, count)
 
-        membership_functions = temp
-
-        '''
-        second try
-        '''
         mfs = []  # list of lists of fuzzy sets
 
-        # compile grid
+        # compile fuzzy sets
         for feat_index in range(0, np.shape(data)[1]):
             min_obs = np.min(data[:, feat_index])
             max_obs = np.max(data[:, feat_index])
@@ -93,26 +43,40 @@ class NFS():
                                 min_obs + (n + 2)*(max_obs - min_obs)/10))
             mfs.append(splits)
 
-        rules = []  # list of dictionnaries (key = list of fuzzy sets, value = dominant class)
-        '''
-        for observation in range(0, np.shape(data)[0]):
-            for (k_low, k_mid, k_high) in splits.keys():
-                if k_low <= data[observation, feat_index] <= k_high:
-        
-                    # if class dict not initialized, create it
-                    if target[observation] not in splits[(k_low, k_mid, k_high)]:
-                        splits[(k_low, k_mid, k_high)][target[observation]] = 0
-        
-                    # increment the count for this class, slice and feature
-                    splits[(k_low, k_mid, k_high)][target[observation]] += 1
-                    break
-        '''
+        # make grid squares
+        intersections = list(itertools.product(*mfs))  # list of tuples of fuzzy sets (every case of the grid)
+
+        # for each square, add a rule for the highest class if it has enough observations
+        for intersection in intersections:
+            classes = {}
+            for observ in range(0, np.shape(data)[0]):
+                found = True
+                for feature in range(0, len(data[observ, :])):
+                    if not intersection[feature][0] <= data[observ, feature] <= intersection[feature][2]:
+                        found = False
+                        break
+                if found:
+                    if target[observ] not in classes:
+                        classes[target[observ]] = 0
+                    classes[target[observ]] += 1
+
+            if not classes:
+                # empty square, go to next
+                continue
+
+            # find the target class for this rule
+            nb_of_observations, rule_class = max(zip(classes.values(), classes.keys()))
+            if nb_of_observations >= self._min_observations_per_rule:
+                # use this rule
+                self._rules.append({intersection: rule_class})
+
+        print(self._rules)
 
     def inspect(self):
         "TODO print FIS"
 
 
 # test script
-nfs = NFS()
+nfs = NFS(min_observations_per_rule=5)
 iris = datasets.load_iris()
 nfs.train(iris.data, iris.target, 100, 0.02)
