@@ -1,24 +1,27 @@
 import numpy as np
 import itertools
 from src.fuzzy_systems.core.rules.fuzzy_rule import FuzzyRule
+from src.mf import MF
 from sklearn import datasets
 
+from src.point import Point
 
-class NFS():
+
+class NFS:
     def __init__(self, max_rules: int = 10, min_observations_per_rule: int = 5):
         self._max_rules = max_rules
         self._min_observations_per_rule = min_observations_per_rule
         self._rules = None
 
-    def train(self, data: np.ndarray, target: np.ndarray, nb_iter: int, learning_rate : float):
+    def train(self, data: np.ndarray, target: np.ndarray, nb_iter: int, learning_rate: float):
         """
         Train the NFS for nb_iter complete passes on data
         Data must be a 2-dimentionnal numpy matrix (each row is an observation, each col a feature)
         
         """
-        self._rules = []  # list of dictionnaries (key = list of fuzzy sets, value = dominant class)
+        self._rules = []  # list of dictionnaries (key = tuple of fuzzy sets, value = dominant class)
 
-        '''
+        """
         élimiter les COMBINAISONS de fuzzy sets ayant moins de _min_observations_per_rule observations
         
         pour chaque observation, trouver la règles la plus active, trouver la distance au centre de cette règle sur
@@ -26,7 +29,8 @@ class NFS():
         n'est pas bonne par rapport à la règle.
         
         puis élaguer
-        '''
+        """
+        print("Building default fuzyy sets ...")
 
         mfs = []  # list of lists of fuzzy sets
 
@@ -38,21 +42,23 @@ class NFS():
             # split dataset equally based on current feature (make triangles)
             splits = []
             for n in range(0, 5):
-                splits.append((min_obs + n*(max_obs - min_obs)/10,
-                                min_obs + (n + 1)*(max_obs - min_obs)/10,
-                                min_obs + (n + 2)*(max_obs - min_obs)/10))
+                splits.append(MF(Point(min_obs + n * (max_obs - min_obs) / 10),  # TODO lier les points aux précédents (si même coord, même référence !)
+                                 Point(min_obs + (n + 1) * (max_obs - min_obs) / 10),
+                                 Point(min_obs + (n + 2) * (max_obs - min_obs) / 10)))
             mfs.append(splits)
 
         # make grid squares
         intersections = list(itertools.product(*mfs))  # list of tuples of fuzzy sets (every case of the grid)
+        print("Rules without consequent built : " + str(len(intersections)))
 
+        print("Finding rule consequents and removing weak rules ...")
         # for each square, add a rule for the highest class if it has enough observations
         for intersection in intersections:
             classes = {}
             for observ in range(0, np.shape(data)[0]):
                 found = True
                 for feature in range(0, len(data[observ, :])):
-                    if not intersection[feature][0] <= data[observ, feature] <= intersection[feature][2]:
+                    if not intersection[feature].low.x <= data[observ, feature] <= intersection[feature].high.x:
                         found = False
                         break
                 if found:
@@ -70,10 +76,10 @@ class NFS():
                 # use this rule
                 self._rules.append({intersection: rule_class})
 
-        print(self._rules)
+        print("Rules found : " + str(len(self._rules)))
 
     def inspect(self):
-        "TODO print FIS"
+        """TODO print FIS"""
 
 
 # test script
