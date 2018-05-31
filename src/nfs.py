@@ -78,22 +78,29 @@ class NFS:
                 self._rules[intersection] = rule_class
         print("Rules found : " + str(len(self._rules)))
 
-        print("Repairing holes left by deleted membership functions ...")
-        for feature in range(0, np.shape(data)[1]):
-            for rule in self._rules.keys():
-                # looks for the neighbor of the membership function rule[feature]
-                has_neighbour = False
-                for other_rule in self._rules.keys():
-                    if rule[feature].mid == other_rule[feature].low and rule[feature].high == other_rule[feature].mid:
-                        has_neighbour = True
-                        break  # neighbour found
-                if not has_neighbour:
-                    nighbour = None
-                    dist = float('+infinity')
-                    # find the next nearest membership function
-                    for other_rule in self._rules.keys():
-                        if rule[feature].high < other_rule[feature].mid and other_rule[feature].mid - rule[feature].high < dist:
+        self.repair(np.shape(data)[1])
 
+    def repair(self, nb_of_features):
+        """
+        Repairs holes in linguistic variables if membership functions were deleted
+        :return: nothing
+        """
+        print("Repairing holes left by deleted membership functions ...")
+        for feature in range(0, nb_of_features):
+            for rule in self._rules.keys():
+                # looks for the nearest neighbor of the membership function "rule[feature]"
+                neighbour = None
+                dist = float('+infinity')
+                # find the next nearest membership function
+                for other_rule in self._rules.keys():
+                    if rule[feature].high.x < other_rule[feature].mid.x and other_rule[feature].mid.x - rule[feature].high.x < dist:
+                        neighbour = rule[feature]
+                        dist = other_rule[feature].mid.x - rule[feature].high.x
+                if neighbour is not None and dist != 0:
+                    # merge points if necessary
+                    neighbour.low = rule[feature].mid
+                    rule[feature].high = neighbour.mid
+        print("Repaired")
 
     def inspect(self):
         """TODO print FIS"""
