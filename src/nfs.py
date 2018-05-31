@@ -19,7 +19,7 @@ class NFS:
         Data must be a 2-dimentionnal numpy matrix (each row is an observation, each col a feature)
         
         """
-        self._rules = []  # list of dictionnaries (key = tuple of fuzzy sets, value = dominant class)
+        self._rules = {}  # dictionnary (key = tuple of fuzzy sets, value = dominant class)
 
         """
         élimiter les COMBINAISONS de fuzzy sets ayant moins de _min_observations_per_rule observations
@@ -40,11 +40,12 @@ class NFS:
             max_obs = np.max(data[:, feat_index])
 
             # split dataset equally based on current feature (make triangles)
+            points = []
+            for n in range(0, 7):
+                points.append(Point(min_obs + n * (max_obs - min_obs) / 7))
             splits = []
             for n in range(0, 5):
-                splits.append(MF(Point(min_obs + n * (max_obs - min_obs) / 10),  # TODO lier les points aux précédents (si même coord, même référence !)
-                                 Point(min_obs + (n + 1) * (max_obs - min_obs) / 10),
-                                 Point(min_obs + (n + 2) * (max_obs - min_obs) / 10)))
+                splits.append(MF(points[n], points[n+1], points[n+2]))
             mfs.append(splits)
 
         # make grid squares
@@ -74,15 +75,31 @@ class NFS:
             nb_of_observations, rule_class = max(zip(classes.values(), classes.keys()))
             if nb_of_observations >= self._min_observations_per_rule:
                 # use this rule
-                self._rules.append({intersection: rule_class})
-
+                self._rules[intersection] = rule_class
         print("Rules found : " + str(len(self._rules)))
+
+        print("Repairing holes left by deleted membership functions ...")
+        for feature in range(0, np.shape(data)[1]):
+            for rule in self._rules.keys():
+                # looks for the neighbor of the membership function rule[feature]
+                has_neighbour = False
+                for other_rule in self._rules.keys():
+                    if rule[feature].mid == other_rule[feature].low and rule[feature].high == other_rule[feature].mid:
+                        has_neighbour = True
+                        break  # neighbour found
+                if not has_neighbour:
+                    nighbour = None
+                    dist = float('+infinity')
+                    # find the next nearest membership function
+                    for other_rule in self._rules.keys():
+                        if rule[feature].high < other_rule[feature].mid and other_rule[feature].mid - rule[feature].high < dist:
+
 
     def inspect(self):
         """TODO print FIS"""
 
 
 # test script
-nfs = NFS(min_observations_per_rule=5)
+nfs = NFS(min_observations_per_rule=10)
 iris = datasets.load_iris()
 nfs.train(iris.data, iris.target, 100, 0.02)
