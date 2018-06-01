@@ -1,10 +1,21 @@
 import numpy as np
 import itertools
+import matplotlib.pyplot as plt
+import sklearn.metrics
+from neurofis.point import Point
+from neurofis.mf import MF
 from fuzzy_systems.core.rules.fuzzy_rule import FuzzyRule
-from nfs.mf import MF
+from fuzzy_systems.core.fis.singleton_fis import SingletonFIS
+from fuzzy_systems.core.membership_functions.singleton_mf import SingletonMF
+from fuzzy_systems.core.membership_functions.trap_mf import TrapMF
+from fuzzy_systems.core.linguistic_variables.linguistic_variable import LinguisticVariable
+from fuzzy_systems.core.membership_functions.lin_piece_wise_mf import LinPWMF
+from fuzzy_systems.core.rules.fuzzy_rule import FuzzyRule, Antecedent, Consequent
+from fuzzy_systems.core.fis.fis import FIS, OR_max, AND_min, MIN, COA_func
+from fuzzy_systems.view.fis_viewer import FISViewer
+from fuzzy_systems.view.fis_surface import show_surface
 from sklearn import datasets
 
-from nfs.point import Point
 
 
 class NFS:
@@ -120,6 +131,34 @@ class NFS:
                     rule[feature].high = neighbour.mid
         print("Repaired")
 
+    def test(self, data: np.ndarray, target: np.ndarray):
+        """
+        Test the trained model
+        :param data:
+        :param target:
+        :return:
+        """
+        predictions = []
+
+        for obs in range(0, np.shape(data)[0]):
+            # find the most activated rule for this observation
+            max_act = 0
+            max_class = -1
+            for mfs, target_class in self._rules.items():
+                act = 0
+                # activate
+                for feat in range(0, len(mfs)):
+                    act += mfs[feat].fuzzyfy(data[obs, feat]) / len(mfs)
+                if act >= max_act:
+                    max_class = target_class
+                    max_act = act
+            predictions.append(max_class)
+
+        print("Confusion matrix : " + str(sklearn.metrics.confusion_matrix(target, predictions)))
+        print("Accuracy score : " + str(sklearn.metrics.accuracy_score(target, predictions)))
+        print("Precision : " + str(sklearn.metrics.precision_score(target, predictions, average='micro')))
+        print("Recall : " + str(sklearn.metrics.recall_score(target, predictions, average='micro')))
+
     def inspect(self):
         """
         Print rules
@@ -132,12 +171,29 @@ class NFS:
             for feat_index in range(0, self._nb_of_features):
                 lvs[feat_index].add(mfs[feat_index])
 
+        displayable_rules = []
+        '''
         for mfs, target_class in self._rules:
+            ling_values_dict = {}
+            for feat_index in range(0, self._nb_of_features):
+                ling_values_dict[""]
+            displayable_lvs.append(LinguisticVariable(name="feature"+str(feat_index), ling_values_dict={
+                "": TrapMF(mfs[feat_index].low.x, mfs[feat_index].mid.x, mfs[feat_index].mid.x, mfs[feat_index].high.x),
+            }))
+        fis = FIS(
+            rules=displayable_rules,
+            aggr_func=np.max,
+            defuzz_func=COA_func
+        )
 
+        fisv = FISViewer(fis, figsize=(12, 10))
+        fisv.show()
+        '''
 
 
 # test script
-nfs = NFS(min_observations_per_rule=20)
+nfs = NFS(min_observations_per_rule=10)
 iris = datasets.load_iris()
-nfs.train(iris.data, iris.target, 100, 0.2)
+nfs.train(iris.data, iris.target, 100, 0.01)
 nfs.inspect()
+nfs.test(iris.data, iris.target)
