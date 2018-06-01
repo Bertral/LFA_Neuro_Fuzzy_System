@@ -1,14 +1,15 @@
 import numpy as np
 import itertools
-from src.fuzzy_systems.core.rules.fuzzy_rule import FuzzyRule
-from src.mf import MF
+from fuzzy_systems.core.rules.fuzzy_rule import FuzzyRule
+from nfs.mf import MF
 from sklearn import datasets
 
-from src.point import Point
+from nfs.point import Point
 
 
 class NFS:
     def __init__(self, max_rules: int = 10, min_observations_per_rule: int = 5):
+        self._nb_of_features = 0
         self._max_rules = max_rules
         self._min_observations_per_rule = min_observations_per_rule
         self._rules = None
@@ -20,16 +21,8 @@ class NFS:
         
         """
         self._rules = {}  # dictionnary (key = tuple of fuzzy sets, value = dominant class)
+        self._nb_of_features = np.shape(data)[1]
 
-        """
-        élimiter les COMBINAISONS de fuzzy sets ayant moins de _min_observations_per_rule observations
-        
-        pour chaque observation, trouver la règles la plus active, trouver la distance au centre de cette règle sur
-        chaque axe, déplacer le centre vers l'observation, idem pour l'extrêmité (un peu plus), ou l'inverse si la classe
-        n'est pas bonne par rapport à la règle.
-        
-        puis élaguer
-        """
         print("Building default fuzyy sets ...")
 
         mfs = []  # list of lists of fuzzy sets
@@ -45,7 +38,7 @@ class NFS:
                 points.append(Point(min_obs + n * (max_obs - min_obs) / 7))
             splits = []
             for n in range(0, 5):
-                splits.append(MF(points[n], points[n+1], points[n+2]))
+                splits.append(MF(points[n], points[n + 1], points[n + 2]))
             mfs.append(splits)
 
         # make grid squares
@@ -80,10 +73,34 @@ class NFS:
 
         self.repair(np.shape(data)[1])
 
+        print("Training ...")
+        for i in range(0, nb_iter):
+            for obs in range(0, np.shape(data)[0]):
+                # find the most activated rule for this observation
+                max_rule = None
+                max_act = 0
+                for mfs, target_class in self._rules.items():
+                    act = 0
+                    # activate
+                    for feat in range(0, len(mfs)):
+                        act += mfs[feat].fuzzyfy(data[obs, feat]) / len(mfs)
+                    # compare activation with max_act
+                    if act > max_act:
+                        max_rule = (mfs, target_class)
+                        max_act = act
+                if max_rule is None:
+                    continue  # skip if the observation has no rule
+                # adjust membership functions for the most activated rule baseed on this observation
+                for feat in range(0, len(max_rule[0])):
+                    # move membership function to/away from (if same/different class) data[obs, feat] on distance
+                    # learning_rate
+                    max_rule[0][feat].move(data[obs, feat], learning_rate, max_rule[1] == target[obs])
+
+        print("Training done !")
+
     def repair(self, nb_of_features):
         """
         Repairs holes in linguistic variables if membership functions were deleted
-        :return: nothing
         """
         print("Repairing holes left by deleted membership functions ...")
         for feature in range(0, nb_of_features):
@@ -93,20 +110,34 @@ class NFS:
                 dist = float('+infinity')
                 # find the next nearest membership function
                 for other_rule in self._rules.keys():
-                    if rule[feature].high.x < other_rule[feature].mid.x and other_rule[feature].mid.x - rule[feature].high.x < dist:
+                    if rule[feature].high.x < other_rule[feature].mid.x \
+                            and other_rule[feature].mid.x - rule[feature].high.x < dist:
                         neighbour = rule[feature]
                         dist = other_rule[feature].mid.x - rule[feature].high.x
-                if neighbour is not None and dist != 0:
+                if neighbour is not None and dist != 0.0:
                     # merge points if necessary
                     neighbour.low = rule[feature].mid
                     rule[feature].high = neighbour.mid
         print("Repaired")
 
     def inspect(self):
-        """TODO print FIS"""
+        """
+        Print rules
+        """
+        # find linguistic variable for each feature (list of sets of membership functions, index is feature number)
+        lvs = []
+        for feat_index in range(0, self._nb_of_features):
+            lvs.append(set())
+        for mfs in self._rules.keys():
+            for feat_index in range(0, self._nb_of_features):
+                lvs[feat_index].add(mfs[feat_index])
+
+        for mfs, target_class in self._rules:
+
 
 
 # test script
-nfs = NFS(min_observations_per_rule=10)
+nfs = NFS(min_observations_per_rule=20)
 iris = datasets.load_iris()
-nfs.train(iris.data, iris.target, 100, 0.02)
+nfs.train(iris.data, iris.target, 100, 0.2)
+nfs.inspect()
