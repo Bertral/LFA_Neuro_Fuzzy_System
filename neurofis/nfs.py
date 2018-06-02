@@ -15,7 +15,7 @@ from fuzzy_systems.core.fis.fis import FIS, OR_max, AND_min, MIN, COA_func
 from fuzzy_systems.view.fis_viewer import FISViewer
 from fuzzy_systems.view.fis_surface import show_surface
 from sklearn import datasets
-
+from sklearn.utils import shuffle
 
 
 class NFS:
@@ -33,6 +33,9 @@ class NFS:
         """
         self._rules = {}  # dictionnary (key = tuple of fuzzy sets, value = dominant class)
         self._nb_of_features = np.shape(data)[1]
+
+        # shuffling reduces the risks of having rules override each other while training
+        data, target = shuffle(data, target)
 
         print("Building default fuzyy sets ...")
 
@@ -62,6 +65,7 @@ class NFS:
             classes = {}
             for observ in range(0, np.shape(data)[0]):
                 found = True
+                # every feature must be found
                 for feature in range(0, len(data[observ, :])):
                     if not intersection[feature].low.x <= data[observ, feature] <= intersection[feature].high.x:
                         found = False
@@ -194,6 +198,6 @@ class NFS:
 # test script
 nfs = NFS(min_observations_per_rule=10)
 iris = datasets.load_iris()
-nfs.train(iris.data, iris.target, 100, 0.01)
+nfs.train(iris.data, iris.target, 1000, 0.001)
 nfs.inspect()
 nfs.test(iris.data, iris.target)
