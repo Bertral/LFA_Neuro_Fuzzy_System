@@ -19,7 +19,7 @@ from sklearn.utils import shuffle
 
 
 class NFS:
-    def __init__(self, max_rules: int = 10, min_observations_per_rule: int = 5):
+    def __init__(self, max_rules: int = 7, min_observations_per_rule: int = 5):
         self._nb_of_features = 0
         self._max_rules = max_rules
         self._min_observations_per_rule = min_observations_per_rule
@@ -29,9 +29,10 @@ class NFS:
         """
         Train the NFS for nb_iter complete passes on data
         Data must be a 2-dimentionnal numpy matrix (each row is an observation, each col a feature)
-        
+
         """
-        self._rules = {}  # dictionnary (key = tuple of fuzzy sets, value = dominant class)
+        self._rules = {
+        }  # dictionnary (key = tuple of fuzzy sets, value = dominant class)
         self._nb_of_features = np.shape(data)[1]
 
         # shuffling reduces the risks of having rules override each other while training
@@ -56,7 +57,8 @@ class NFS:
             mfs.append(splits)
 
         # make grid squares
-        intersections = list(itertools.product(*mfs))  # list of tuples of fuzzy sets (every case of the grid)
+        # list of tuples of fuzzy sets (every case of the grid)
+        intersections = list(itertools.product(*mfs))
         print("Rules without consequent built : " + str(len(intersections)))
 
         print("Finding rule consequents and removing weak rules ...")
@@ -80,7 +82,8 @@ class NFS:
                 continue
 
             # find the target class for this rule
-            nb_of_observations, rule_class = max(zip(classes.values(), classes.keys()))
+            nb_of_observations, rule_class = max(
+                zip(classes.values(), classes.keys()))
             if nb_of_observations >= self._min_observations_per_rule:
                 # use this rule
                 self._rules[intersection] = rule_class
@@ -89,18 +92,18 @@ class NFS:
         self.repair(np.shape(data)[1])
 
         print("Training ...")
-        for i in range(0, nb_iter):
+        for _ in range(0, nb_iter):
             for obs in range(0, np.shape(data)[0]):
                 # find the most activated rule for this observation
                 max_rule = None
                 max_act = 0
                 for mfs, target_class in self._rules.items():
-                    act = 0
+                    act = 1
                     # activate
                     for feat in range(0, len(mfs)):
-                        act += mfs[feat].fuzzyfy(data[obs, feat]) / len(mfs)
+                        act = min(act, mfs[feat].fuzzyfy(data[obs, feat]))
                     # compare activation with max_act
-                    if act > max_act:
+                    if act >= max_act:
                         max_rule = (mfs, target_class)
                         max_act = act
                 if max_rule is None:
@@ -109,7 +112,8 @@ class NFS:
                 for feat in range(0, len(max_rule[0])):
                     # move membership function to/away from (if same/different class) data[obs, feat] on distance
                     # learning_rate
-                    max_rule[0][feat].move(data[obs, feat], learning_rate, max_rule[1] == target[obs])
+                    max_rule[0][feat].move(
+                        data[obs, feat], learning_rate, max_rule[1] == target[obs])
 
         print("Training done !")
 
@@ -127,13 +131,78 @@ class NFS:
                 for other_rule in self._rules.keys():
                     if rule[feature].high.x < other_rule[feature].mid.x \
                             and other_rule[feature].mid.x - rule[feature].high.x < dist:
-                        neighbour = rule[feature]
+                        neighbour = other_rule[feature]
                         dist = other_rule[feature].mid.x - rule[feature].high.x
                 if neighbour is not None and dist != 0.0:
                     # merge points if necessary
                     neighbour.low = rule[feature].mid
                     rule[feature].high = neighbour.mid
         print("Repaired")
+
+    def pruning(self, data: np.ndarray):
+        "Remove antecedents that are not used in rules and poorly used rules"
+
+        print("Number of rules before pruning :", len(self._rules))
+
+        # track usage of rules for pruning
+        _rules_usage = {}
+        # track antecedent usage for each rules
+        _antecedent_usage = {}
+        for obs in range(0, np.shape(data)[0]):
+            # find the most activated rule for this observation
+            max_act = 0
+            max_mfs = None
+            for mfs in self._rules.keys():
+                # add the rule to _rules_usage dict if not already in
+                if mfs not in _rules_usage:
+                    _rules_usage[mfs] = 0
+
+                # add the rule's antecedents to _antecedent_usage if not already in
+                if mfs not in _antecedent_usage:
+                    _antecedent_usage[mfs] = {}
+
+                act = 1
+                min_ant = None
+                for ant in range(0, len(mfs)):
+                    # add the antecedent to this rule's _antecedent_usage if not already in
+                    if mfs[ant] not in _antecedent_usage[mfs]:
+                        _antecedent_usage[mfs][mfs[ant]] = 0
+
+                    mf_act = mfs[ant].fuzzyfy(data[obs, ant])
+                    if mf_act <= act:
+                        act = mf_act
+                        min_ant = mfs[ant]
+
+                # save the fact that this antecedent is dominant
+                # for this rule for this observation
+                _antecedent_usage[mfs][min_ant] += 1
+
+                if act >= max_act:
+                    max_act = act
+                    max_mfs = mfs
+            # save the fact that this rule is used for this observation
+            _rules_usage[max_mfs] += 1
+
+        # sort rule by descending usage order
+        best_rules_usage = [(k, _rules_usage[k]) for k in
+                            sorted(_rules_usage, key=_rules_usage.get, reverse=True)][:self._max_rules]
+
+        best_rules = {}
+        for mfs, _ in best_rules_usage:
+            used_mfs = []
+            for ant in mfs:
+                # build rule with only antecedents that have been used at least once
+                if _antecedent_usage[mfs][ant] > 0:
+                    used_mfs.append(ant)
+            assert len(used_mfs) > 0
+            best_rules[tuple(used_mfs)] = self._rules[mfs]
+
+        self._rules = best_rules
+
+        print("Number of rules after pruning :", len(self._rules))
+
+        # start by checking for holes
+        self.repair(np.shape(data)[1])
 
     def test(self, data: np.ndarray, target: np.ndarray):
         """
@@ -142,26 +211,32 @@ class NFS:
         :param target:
         :return:
         """
-        predictions = []
 
+        predictions = []
+        # track usage of rules for pruning
+        self._rules_usage = {}
         for obs in range(0, np.shape(data)[0]):
             # find the most activated rule for this observation
             max_act = 0
             max_class = -1
             for mfs, target_class in self._rules.items():
-                act = 0
+                act = 1
                 # activate
                 for feat in range(0, len(mfs)):
-                    act += mfs[feat].fuzzyfy(data[obs, feat]) / len(mfs)
+                    act = min(act, mfs[feat].fuzzyfy(data[obs, feat]))
                 if act >= max_act:
                     max_class = target_class
                     max_act = act
             predictions.append(max_class)
 
-        print("Confusion matrix : " + str(sklearn.metrics.confusion_matrix(target, predictions)))
-        print("Accuracy score : " + str(sklearn.metrics.accuracy_score(target, predictions)))
-        print("Precision : " + str(sklearn.metrics.precision_score(target, predictions, average='micro')))
-        print("Recall : " + str(sklearn.metrics.recall_score(target, predictions, average='micro')))
+        print("Confusion matrix : " +
+              str(sklearn.metrics.confusion_matrix(target, predictions)))
+        print("Accuracy score : " +
+              str(sklearn.metrics.accuracy_score(target, predictions)))
+        print("Precision : " + str(sklearn.metrics.precision_score(target,
+                                                                   predictions, average='micro')))
+        print("Recall : " + str(sklearn.metrics.recall_score(target,
+                                                             predictions, average='micro')))
 
     def inspect(self):
         """
@@ -193,11 +268,3 @@ class NFS:
         fisv = FISViewer(fis, figsize=(12, 10))
         fisv.show()
         '''
-
-
-# test script
-nfs = NFS(min_observations_per_rule=10)
-iris = datasets.load_iris()
-nfs.train(iris.data, iris.target, 1000, 0.001)
-nfs.inspect()
-nfs.test(iris.data, iris.target)
