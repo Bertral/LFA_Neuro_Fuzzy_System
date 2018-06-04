@@ -194,6 +194,9 @@ class NFS:
                 # build rule with only antecedents that have been used at least once
                 if _antecedent_usage[mfs][ant] > 0:
                     used_mfs.append(ant)
+                else:
+                    used_mfs.append(None)
+                    print("antecedent removed")
             assert len(used_mfs) > 0
             best_rules[tuple(used_mfs)] = self._rules[mfs]
 
@@ -213,8 +216,6 @@ class NFS:
         """
 
         predictions = []
-        # track usage of rules for pruning
-        self._rules_usage = {}
         for obs in range(0, np.shape(data)[0]):
             # find the most activated rule for this observation
             max_act = 0
