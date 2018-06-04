@@ -60,7 +60,7 @@ class NFS:
         # make grid squares
         # list of tuples of fuzzy sets (every case of the grid)
         intersections = itertools.product(*mfs)
-        # print("Rules without consequent built : " + str(len(intersections)))
+        print("Rules without consequent built")
 
         print("Finding rule consequents and removing weak rules ...")
         # for each square, add a rule for the highest class if it has enough observations
@@ -95,7 +95,7 @@ class NFS:
 
         self._nb_of_classes = len(classes)
 
-        self.repair(np.shape(data)[1])
+        self.repair()
 
         print("Training ...")
         for _ in range(0, nb_iter):
@@ -123,12 +123,12 @@ class NFS:
 
         print("Training done !")
 
-    def repair(self, nb_of_features):
+    def repair(self):
         """
         Repairs holes in linguistic variables if membership functions were deleted
         """
         print("Repairing holes left by deleted membership functions ...")
-        for feature in range(0, nb_of_features):
+        for feature in range(0, self._nb_of_features):
             for rule in self._rules.keys():
                 # looks for the nearest neighbor of the membership function "rule[feature]"
                 neighbour = None
@@ -202,7 +202,6 @@ class NFS:
                     used_mfs.append(ant)
                 else:
                     used_mfs.append(None)
-                    print("antecedent removed")
             assert len(used_mfs) > 0
             best_rules[tuple(used_mfs)] = self._rules[mfs]
 
@@ -211,7 +210,7 @@ class NFS:
         print("Number of rules after pruning :", len(self._rules))
 
         # start by checking for holes
-        self.repair(np.shape(data)[1])
+        self.repair()
 
     def test(self, data: np.ndarray, target: np.ndarray):
         """
@@ -222,6 +221,7 @@ class NFS:
         """
 
         predictions = []
+        # track usage of rules for pruning
         for obs in range(0, np.shape(data)[0]):
             # find the most activated rule for this observation
             max_act = 0
@@ -237,7 +237,7 @@ class NFS:
                     max_act = act
             predictions.append(max_class)
 
-        print("Confusion matrix : " +
+        print("Confusion matrix :\n" +
               str(sklearn.metrics.confusion_matrix(target, predictions)))
         print("Accuracy score : " +
               str(sklearn.metrics.accuracy_score(target, predictions)))
