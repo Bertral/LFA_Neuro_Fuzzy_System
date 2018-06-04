@@ -24,6 +24,7 @@ class NFS:
         self._max_rules = max_rules
         self._min_observations_per_rule = min_observations_per_rule
         self._rules = None
+        self._classes = set()
 
     def train(self, data: np.ndarray, target: np.ndarray, nb_iter: int, learning_rate: float):
         """
@@ -58,14 +59,17 @@ class NFS:
 
         # make grid squares
         # list of tuples of fuzzy sets (every case of the grid)
-        intersections = list(itertools.product(*mfs))
-        print("Rules without consequent built : " + str(len(intersections)))
+        intersections = itertools.product(*mfs)
+        # print("Rules without consequent built : " + str(len(intersections)))
 
         print("Finding rule consequents and removing weak rules ...")
         # for each square, add a rule for the highest class if it has enough observations
         for intersection in intersections:
             classes = {}
             for observ in range(0, np.shape(data)[0]):
+                # add the class to the set of classes
+                self._classes.add(target[observ])
+
                 found = True
                 # every feature must be found
                 for feature in range(0, len(data[observ, :])):
@@ -88,6 +92,8 @@ class NFS:
                 # use this rule
                 self._rules[intersection] = rule_class
         print("Rules found : " + str(len(self._rules)))
+
+        self._nb_of_classes = len(classes)
 
         self.repair(np.shape(data)[1])
 
@@ -245,28 +251,43 @@ class NFS:
         Print rules
         """
         # find linguistic variable for each feature (list of sets of membership functions, index is feature number)
-        lvs = []
-        for feat_index in range(0, self._nb_of_features):
-            lvs.append(set())
-        for mfs in self._rules.keys():
-            for feat_index in range(0, self._nb_of_features):
-                lvs[feat_index].add(mfs[feat_index])
+        # lvs = []
+        # for feat_index in range(0, self._nb_of_features):
+        #     lvs.append(set())
+        # for mfs in self._rules.keys():
+        #     for feat_index in range(0, self._nb_of_features):
+        #         lvs[feat_index].add(mfs[feat_index])
 
-        displayable_rules = []
-        '''
-        for mfs, target_class in self._rules:
-            ling_values_dict = {}
-            for feat_index in range(0, self._nb_of_features):
-                ling_values_dict[""]
-            displayable_lvs.append(LinguisticVariable(name="feature"+str(feat_index), ling_values_dict={
-                "": TrapMF(mfs[feat_index].low.x, mfs[feat_index].mid.x, mfs[feat_index].mid.x, mfs[feat_index].high.x),
-            }))
-        fis = FIS(
-            rules=displayable_rules,
-            aggr_func=np.max,
-            defuzz_func=COA_func
+        ling_values_dict = {}
+        for class_name in self._classes:
+            ling_values_dict[str(class_name)] = SingletonMF(class_name)
+
+        consequent_lvar = LinguisticVariable(
+            name="class", ling_values_dict=ling_values_dict)
+
+        rules = []
+
+        for mfs, target_class in self._rules.items():
+            ants_list = []
+            for feat_index in range(len(mfs)):
+                if mfs[feat_index] is None:
+                    continue
+                ants_list.append(Antecedent(LinguisticVariable(name="feature"+str(feat_index), ling_values_dict={
+                    "": TrapMF(mfs[feat_index].low.x, mfs[feat_index].mid.x, mfs[feat_index].mid.x, mfs[feat_index].high.x),
+                }), ""))
+            rules.append(FuzzyRule(
+                ants=ants_list,
+                # this is the antecedent activation function. In this library, a single rule can only be "chained" using one fuzzy operator
+                # So this is correct: v1 is LOW AND v2 is LOW AND v3 is HIGH
+                # But this is not: v1 is LOW AND v2 is LOW OR v3 is HIGH
+                ant_act_func=AND_min,
+                cons=[Consequent(consequent_lvar, str(target_class))],
+                # implication function or "how the activated antecedents value will be combined with the consequent(s)
+                impl_func=MIN
+            ))
+        fis = SingletonFIS(
+            rules=rules
         )
 
         fisv = FISViewer(fis, figsize=(12, 10))
         fisv.show()
-        '''
