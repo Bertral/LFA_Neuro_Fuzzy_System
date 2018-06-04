@@ -129,7 +129,7 @@ class NFS:
                 dist = float('+infinity')
                 # find the next nearest membership function
                 for other_rule in self._rules.keys():
-                    if rule[feature].high.x < other_rule[feature].mid.x \
+                    if rule[feature] is not None and rule[feature].high.x < other_rule[feature].mid.x \
                             and other_rule[feature].mid.x - rule[feature].high.x < dist:
                         neighbour = other_rule[feature]
                         dist = other_rule[feature].mid.x - rule[feature].high.x
