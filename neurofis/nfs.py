@@ -224,7 +224,8 @@ class NFS:
                 act = 1
                 # activate
                 for feat in range(0, len(mfs)):
-                    act = min(act, mfs[feat].fuzzyfy(data[obs, feat]))
+                    if mfs[feat] is not None:
+                        act = min(act, mfs[feat].fuzzyfy(data[obs, feat]))
                 if act >= max_act:
                     max_class = target_class
                     max_act = act
