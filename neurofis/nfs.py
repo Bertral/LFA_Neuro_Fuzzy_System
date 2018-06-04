@@ -129,7 +129,7 @@ class NFS:
                 dist = float('+infinity')
                 # find the next nearest membership function
                 for other_rule in self._rules.keys():
-                    if rule[feature].high.x < other_rule[feature].mid.x \
+                    if rule[feature] is not None and rule[feature].high.x < other_rule[feature].mid.x \
                             and other_rule[feature].mid.x - rule[feature].high.x < dist:
                         neighbour = other_rule[feature]
                         dist = other_rule[feature].mid.x - rule[feature].high.x
@@ -194,6 +194,8 @@ class NFS:
                 # build rule with only antecedents that have been used at least once
                 if _antecedent_usage[mfs][ant] > 0:
                     used_mfs.append(ant)
+                else:
+                    used_mfs.append(None)
             assert len(used_mfs) > 0
             best_rules[tuple(used_mfs)] = self._rules[mfs]
 
